@@ -52832,6 +52832,9 @@ function getForkReleaseAssetName(binary, runnerOS, arch) {
     const suffix = runnerOS === runnerWindows ? ".exe" : "";
     return `${binary}-${platform}-${arch}${suffix}`;
 }
+function getInstalledBinaryName(binary, runnerOS) {
+    return runnerOS === runnerWindows ? `${binary}.exe` : binary;
+}
 async function downloadVerifiedAsset(asset, targetPath) {
     const downloadedPath = await tc.downloadTool(asset.browser_download_url, targetPath);
     const actualSha = await calculateFileSha256(downloadedPath);
@@ -52859,23 +52862,29 @@ async function installTailscaleFromGithubReleases(config, toolPath, runnerOS) {
     if (!tailscaleAsset || !tailscaledAsset) {
         throw new Error(`Missing release assets for ${releaseTag(config.resolvedVersion)} on ${runnerOS}/${config.arch}`);
     }
-    await downloadVerifiedAsset(tailscaleAsset, path.join(toolPath, tailscaleAssetName));
-    await downloadVerifiedAsset(tailscaledAsset, path.join(toolPath, tailscaledAssetName));
+    const tailscaleInstallName = getInstalledBinaryName(cmdTailscale, runnerOS);
+    const tailscaledInstallName = getInstalledBinaryName(cmdTailscaled, runnerOS);
+    await downloadVerifiedAsset(tailscaleAsset, path.join(toolPath, tailscaleInstallName));
+    await downloadVerifiedAsset(tailscaledAsset, path.join(toolPath, tailscaledInstallName));
     if (runnerOS === runnerWindows) {
-        await execSilent("install fork service", path.join(toolPath, tailscaledAssetName), [
+        await execSilent("install fork service", path.join(toolPath, tailscaledInstallName), [
             "install-system-daemon",
         ]);
         await execSilent("start fork service", "net", ["start", "Tailscale"]);
         core.addPath(toolPath);
         return;
     }
-    fs.chmodSync(path.join(toolPath, tailscaleAssetName), 0o755);
-    fs.chmodSync(path.join(toolPath, tailscaledAssetName), 0o755);
+    fs.chmodSync(path.join(toolPath, tailscaleInstallName), 0o755);
+    fs.chmodSync(path.join(toolPath, tailscaledInstallName), 0o755);
     await execSilent("copy tailscale binaries to /usr/local/bin", "sudo", [
         "cp",
-        path.join(toolPath, tailscaleAssetName),
-        path.join(toolPath, tailscaledAssetName),
-        "/usr/local/bin",
+        path.join(toolPath, tailscaleInstallName),
+        cmdTailscaleFullPath,
+    ]);
+    await execSilent("copy tailscaled binary to /usr/local/bin", "sudo", [
+        "cp",
+        path.join(toolPath, tailscaledInstallName),
+        cmdTailscaledFullPath,
     ]);
     await execSilent("chmod tailscale binary", "sudo", [
         "chmod",
@@ -52891,6 +52900,8 @@ async function installTailscaleFromGithubReleases(config, toolPath, runnerOS) {
 async function installTailscaleWindowsFromGithubReleases(config, toolPath, fromCache) {
     const tailscaleAssetName = getForkReleaseAssetName(cmdTailscale, runnerWindows, config.arch);
     const tailscaledAssetName = getForkReleaseAssetName(cmdTailscaled, runnerWindows, config.arch);
+    const tailscaleInstallName = getInstalledBinaryName(cmdTailscale, runnerWindows);
+    const tailscaledInstallName = getInstalledBinaryName(cmdTailscaled, runnerWindows);
     fs.mkdirSync(toolPath, { recursive: true });
     if (!fromCache) {
         const release = await fetchGithubRelease(`https://api.github.com/repos/LiuTangLei/tailscale/releases/tags/${releaseTag(config.resolvedVersion)}`);
@@ -52900,12 +52911,12 @@ async function installTailscaleWindowsFromGithubReleases(config, toolPath, fromC
         if (!tailscaleAsset || !tailscaledAsset) {
             throw new Error(`Missing release assets for ${releaseTag(config.resolvedVersion)} on ${runnerWindows}/${config.arch}`);
         }
-        await downloadVerifiedAsset(tailscaleAsset, path.join(toolPath, tailscaleAssetName));
-        await downloadVerifiedAsset(tailscaledAsset, path.join(toolPath, tailscaledAssetName));
+        await downloadVerifiedAsset(tailscaleAsset, path.join(toolPath, tailscaleInstallName));
+        await downloadVerifiedAsset(tailscaledAsset, path.join(toolPath, tailscaledInstallName));
     }
     else {
-        const tailscalePath = path.join(toolPath, tailscaleAssetName);
-        const tailscaledPath = path.join(toolPath, tailscaledAssetName);
+        const tailscalePath = path.join(toolPath, tailscaleInstallName);
+        const tailscaledPath = path.join(toolPath, tailscaledInstallName);
         if (!fs.existsSync(tailscalePath) || !fs.existsSync(tailscaledPath)) {
             throw new Error(`Cached binaries not found in ${toolPath}`);
         }
@@ -52913,7 +52924,7 @@ async function installTailscaleWindowsFromGithubReleases(config, toolPath, fromC
     if (Object.keys(config.amneziaEnv).length > 0) {
         await writeWindowsServiceEnvironment(config.amneziaEnv);
     }
-    await execSilent("install fork service", path.join(toolPath, tailscaledAssetName), [
+    await execSilent("install fork service", path.join(toolPath, tailscaledInstallName), [
         "install-system-daemon",
     ]);
     await execSilent("start fork service", "net", ["start", "Tailscale"]);
