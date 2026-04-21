@@ -5,7 +5,7 @@ by adding a step to your workflow.
 
 ```yaml
 - name: Tailscale
-  uses: tailscale/github-action@v4
+  uses: lazulikao/github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -35,7 +35,7 @@ on tailnets which use [Device Approval][kb-device-approval]
 
 ```yaml
 - name: Tailscale
-  uses: tailscale/github-action@v4
+  uses: lazulikao/github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     audience: ${{ secrets.TS_AUDIENCE }}
@@ -79,7 +79,7 @@ You can do this by adding a list of hosts to ping to the action configuration:
 
 ```yaml
 - name: Tailscale
-  uses: tailscale/github-action@v4
+  uses: lazulikao/github-action@v4
   with:
     ping: 100.x.y.z,my-machine.my-tailnet.ts.net
 ```
@@ -103,7 +103,7 @@ If you are using this Action in a [Tailnet Lock][kb-tailnet-lock] enabled networ
 
 ```yaml
 - name: Tailscale
-  uses: tailscale/github-action@v4
+  uses: lazulikao/github-action@v4
   with:
     authkey: tskey-auth-...
     statedir: /tmp/tailscale-state/
@@ -115,7 +115,7 @@ Which Tailscale version to use can be set like this:
 
 ```yaml
 - name: Tailscale
-  uses: tailscale/github-action@v4
+  uses: lazulikao/github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -127,7 +127,7 @@ If you'd like to specify the latest version, simply set the version as `latest`
 
 ```yaml
 - name: Tailscale
-  uses: tailscale/github-action@v4
+  uses: lazulikao/github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -148,7 +148,7 @@ The action can also use the LiuTangLei AWG fork instead of upstream Tailscale:
 
 ```yaml
 - name: Tailscale
-  uses: tailscale/github-action@v4
+  uses: lazulikao/github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -161,6 +161,17 @@ When `source: liutanglei` is selected, the action installs the binaries publishe
 https://github.com/LiuTangLei/tailscale/releases and verifies the release asset digests from GitHub.
 `latest` picks the newest stable release and `unstable` picks the newest prerelease.
 
+If you need the fork's AmneziaWG knobs, you can either set workflow environment variables or pass a compact JSON blob through the `amnezia` input:
+
+```yaml
+with:
+  source: liutanglei
+  amnezia: '{"s1":19,"s2":23,"s3":13,"s4":5,"h1":5,"h2":6,"h3":7,"h4":132,"jc":0,"jmin":0,"jmax":0,"i1":"<b 0x01><t><r 4><b 0x00ffff00fefefefefdfdfdfd12345678><r 8>"}'
+```
+
+The action maps that JSON to `TS_AMNEZIA_*` environment variables before starting `tailscaled`.
+You can still provide individual `TS_AMNEZIA_*` variables in the workflow `env:` block; the JSON input and explicit env vars are merged, with explicit env vars taking precedence.
+
 ## Cache Tailscale binaries
 
 Caching can reduce download times and download failures on runners with slower network connectivity.
@@ -170,7 +181,7 @@ Although caching is generally recommended, you can disable it by passing `'false
 
 ```yaml
 - name: Tailscale
-  uses: tailscale/github-action@v4
+  uses: lazulikao/github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}

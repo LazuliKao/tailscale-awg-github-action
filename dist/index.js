@@ -52103,6 +52103,24 @@ const versionLatest = "latest";
 const versionUnstable = "unstable";
 const tailscaleSourceOfficial = "official";
 const tailscaleSourceLiuTangLei = "liutanglei";
+const amneziaEnvKeys = [
+    "TS_AMNEZIA_JC",
+    "TS_AMNEZIA_JMIN",
+    "TS_AMNEZIA_JMAX",
+    "TS_AMNEZIA_S1",
+    "TS_AMNEZIA_S2",
+    "TS_AMNEZIA_S3",
+    "TS_AMNEZIA_S4",
+    "TS_AMNEZIA_I1",
+    "TS_AMNEZIA_I2",
+    "TS_AMNEZIA_I3",
+    "TS_AMNEZIA_I4",
+    "TS_AMNEZIA_I5",
+    "TS_AMNEZIA_H1",
+    "TS_AMNEZIA_H2",
+    "TS_AMNEZIA_H3",
+    "TS_AMNEZIA_H4",
+];
 // Cross-platform Tailscale local API status check
 async function getTailscaleStatus() {
     const { stdout } = await execSilent("get tailscale status", cmdTailscale, [
@@ -52236,6 +52254,7 @@ async function getInputs() {
     const config = {
         version: core.getInput("version") || "1.94.2",
         source: (core.getInput("source") || tailscaleSourceOfficial).toLowerCase(),
+        amneziaEnv: getAmneziaEnv(),
         resolvedVersion: "",
         arch: "",
         authKey: authKey,
@@ -52611,6 +52630,10 @@ async function startTailscaleDaemon(config) {
             "ignore",
             fs.openSync(path.join(os.homedir(), "tailscaled.log"), "w"),
         ],
+        env: {
+            ...process.env,
+            ...config.amneziaEnv,
+        },
     });
     // Store PID for cleaning up daemon process in logout.ts.
     const pidFile = path.join(xdgRuntimeDir(), "tailscaled.pid");
@@ -52887,6 +52910,9 @@ async function installTailscaleWindowsFromGithubReleases(config, toolPath, fromC
             throw new Error(`Cached binaries not found in ${toolPath}`);
         }
     }
+    if (Object.keys(config.amneziaEnv).length > 0) {
+        await writeWindowsServiceEnvironment(config.amneziaEnv);
+    }
     await execSilent("install fork service", path.join(toolPath, tailscaledAssetName), [
         "install-system-daemon",
     ]);
@@ -52976,6 +53002,77 @@ async function execSilent(label, cmd, args, opts) {
         throw new execError(`${cmd} failed with exit code ${out.exitCode}`, out.exitCode, out.stderr);
     }
     return out;
+}
+function getAmneziaEnv() {
+    const env = {};
+    const amneziaInput = core.getInput("amnezia");
+    if (amneziaInput) {
+        const parsed = parseAmneziaInput(amneziaInput);
+        for (const [key, value] of Object.entries(parsed)) {
+            env[key] = value;
+        }
+    }
+    for (const key of amneziaEnvKeys) {
+        const value = process.env[key];
+        if (value && value.trim().length > 0) {
+            env[key] = value.trim();
+        }
+    }
+    return env;
+}
+function parseAmneziaInput(input) {
+    let data;
+    try {
+        data = JSON.parse(input);
+    }
+    catch {
+        throw new Error("The amnezia input must be valid JSON.");
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw new Error("The amnezia input must be a JSON object.");
+    }
+    const source = data;
+    const env = {};
+    const mapping = {
+        s1: "TS_AMNEZIA_S1",
+        s2: "TS_AMNEZIA_S2",
+        s3: "TS_AMNEZIA_S3",
+        s4: "TS_AMNEZIA_S4",
+        h1: "TS_AMNEZIA_H1",
+        h2: "TS_AMNEZIA_H2",
+        h3: "TS_AMNEZIA_H3",
+        h4: "TS_AMNEZIA_H4",
+        jc: "TS_AMNEZIA_JC",
+        jmin: "TS_AMNEZIA_JMIN",
+        jmax: "TS_AMNEZIA_JMAX",
+        i1: "TS_AMNEZIA_I1",
+        i2: "TS_AMNEZIA_I2",
+        i3: "TS_AMNEZIA_I3",
+        i4: "TS_AMNEZIA_I4",
+        i5: "TS_AMNEZIA_I5",
+    };
+    for (const [inputKey, envKey] of Object.entries(mapping)) {
+        const value = source[inputKey];
+        if (value === undefined || value === null || value === "") {
+            continue;
+        }
+        if (typeof value === "number") {
+            env[envKey] = String(value);
+            continue;
+        }
+        if (typeof value === "string") {
+            env[envKey] = value;
+            continue;
+        }
+        throw new Error(`The amnezia input field '${inputKey}' must be a string or number.`);
+    }
+    return env;
+}
+async function writeWindowsServiceEnvironment(env) {
+    const envPath = "C:\\ProgramData\\Tailscale\\tailscaled-env.txt";
+    fs.mkdirSync(path.dirname(envPath), { recursive: true });
+    const lines = Object.entries(env).map(([key, value]) => `${key}=${value}`);
+    fs.writeFileSync(envPath, `${lines.join("\n")}\n`, { encoding: "utf8" });
 }
 class execError {
     constructor(msg, exitCode, stderr) {

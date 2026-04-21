@@ -32,6 +32,10 @@ inputs:
     description: 'Tailscale source to install. Use `official` for upstream Tailscale, or `liutanglei` for the AWG fork.'
     required: false
     default: 'official'
+  amnezia:
+    description: 'JSON object of AmneziaWG settings, e.g. {"s1":19,"h1":5,"i1":"..."}. These values are mapped to TS_AMNEZIA_* environment variables.'
+    required: false
+    default: ''
   args:
     description: 'Optional additional arguments to `tailscale up`.'
     required: false
