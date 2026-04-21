@@ -142,6 +142,25 @@ You can also specify `version: unstable` to use the latest unstable version of T
 For Linux and Windows, this uses the version published at https://pkgs.tailscale.com/unstable,
 and for MacOS it uses the HEAD of the `main` branch of https://github.com/tailscale/tailscale/.
 
+### Selecting the Tailscale source
+
+The action can also use the LiuTangLei AWG fork instead of upstream Tailscale:
+
+```yaml
+- name: Tailscale
+  uses: tailscale/github-action@v4
+  with:
+    oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+    oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+    tags: tag:ci
+    source: liutanglei
+    version: latest
+```
+
+When `source: liutanglei` is selected, the action installs the binaries published in
+https://github.com/LiuTangLei/tailscale/releases and verifies the release asset digests from GitHub.
+`latest` picks the newest stable release and `unstable` picks the newest prerelease.
+
 ## Cache Tailscale binaries
 
 Caching can reduce download times and download failures on runners with slower network connectivity.

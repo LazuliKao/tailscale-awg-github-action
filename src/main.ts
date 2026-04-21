@@ -33,9 +33,25 @@ function xdgRuntimeDir(): string {
 
 const versionLatest = "latest";
 const versionUnstable = "unstable";
+const tailscaleSourceOfficial = "official";
+const tailscaleSourceLiuTangLei = "liutanglei";
+
+type githubReleaseAsset = {
+  name: string;
+  browser_download_url: string;
+  digest?: string;
+};
+
+type githubRelease = {
+  tag_name: string;
+  draft: boolean;
+  prerelease: boolean;
+  assets: githubReleaseAsset[];
+};
 
 interface TailscaleConfig {
   version: string;
+  source: string;
   resolvedVersion: string;
   arch: string;
   authKey: string;
@@ -98,7 +114,11 @@ async function run(): Promise<void> {
     validateAuth(config);
 
     // Resolve version
-    config.resolvedVersion = await resolveVersion(config.version, runnerOS);
+    config.resolvedVersion = await resolveVersion(
+      config.version,
+      runnerOS,
+      config.source,
+    );
     core.info(`Resolved Tailscale version: ${config.resolvedVersion}`);
 
     // Set architecture
@@ -221,6 +241,7 @@ async function getInputs(): Promise<TailscaleConfig> {
 
   const config = {
     version: core.getInput("version") || "1.94.2",
+    source: (core.getInput("source") || tailscaleSourceOfficial).toLowerCase(),
     resolvedVersion: "",
     arch: "",
     authKey: authKey,
@@ -273,9 +294,31 @@ function validateAuth(config: TailscaleConfig): void {
 async function resolveVersion(
   version: string,
   runnerOS: string,
+  source: string,
 ): Promise<string> {
-  if (runnerOS === runnerMacOS && version === versionUnstable) {
+  if (source === tailscaleSourceOfficial && runnerOS === runnerMacOS && version === versionUnstable) {
     return "main";
+  }
+
+  if (source === tailscaleSourceLiuTangLei) {
+    if (version === versionLatest) {
+      return normalizeVersion(
+        (await fetchGithubRelease(`https://api.github.com/repos/LiuTangLei/tailscale/releases/latest`)).tag_name,
+      );
+    }
+
+    if (version === versionUnstable) {
+      const releases = await fetchGithubReleases(
+        `https://api.github.com/repos/LiuTangLei/tailscale/releases?per_page=100`,
+      );
+      const release = releases.find((item) => item.prerelease && !item.draft);
+      if (!release) {
+        throw new Error("No prerelease found for LiuTangLei/tailscale");
+      }
+      return normalizeVersion(release.tag_name);
+    }
+
+    return normalizeVersion(version);
   }
 
   if (version === versionLatest || version === versionUnstable) {
@@ -301,7 +344,7 @@ async function resolveVersion(
     }
   }
 
-  return version;
+  return normalizeVersion(version);
 }
 
 function getTailscaleArch(runnerOS: string): string {
@@ -365,7 +408,9 @@ async function installTailscale(
   }
 
   // Install fresh if not cached
-  if (runnerOS === runnerLinux) {
+  if (config.source === tailscaleSourceLiuTangLei) {
+    await installTailscaleFromGithubReleases(config, toolPath, runnerOS);
+  } else if (runnerOS === runnerLinux) {
     await installTailscaleLinux(config, toolPath);
   } else if (runnerOS === runnerWindows) {
     await installTailscaleWindows(config, toolPath);
@@ -486,6 +531,11 @@ async function installTailscaleWindows(
   toolPath: string,
   fromCache: boolean = false,
 ): Promise<void> {
+  if (config.source === tailscaleSourceLiuTangLei) {
+    await installTailscaleWindowsFromGithubReleases(config, toolPath, fromCache);
+    return;
+  }
+
   // Create tool directory
   fs.mkdirSync(toolPath, { recursive: true });
   const msiPath = path.join(toolPath, "tailscale.msi");
@@ -572,6 +622,11 @@ async function installTailscaleMacOS(
   config: TailscaleConfig,
   toolPath: string,
 ): Promise<void> {
+  if (config.source === tailscaleSourceLiuTangLei) {
+    await installTailscaleFromGithubReleases(config, toolPath, runnerMacOS);
+    return;
+  }
+
   core.info("Building tailscale from src on macOS...");
 
   // Clone the repo
@@ -842,7 +897,9 @@ function generateCacheKey(
     return undefined;
   }
 
-  return `action-setup-tailscale/${config.resolvedVersion}/${runnerOS}-${config.arch}`;
+  const sourcePrefix =
+    config.source === tailscaleSourceOfficial ? "" : `${config.source}/`;
+  return `action-setup-tailscale/${sourcePrefix}${config.resolvedVersion}/${runnerOS}-${config.arch}`;
 }
 
 function getToolPath(config: TailscaleConfig, runnerOS: string): string {
@@ -854,9 +911,177 @@ function getToolPath(config: TailscaleConfig, runnerOS: string): string {
   return path.join(
     cacheDirectory,
     cmdTailscale,
+    config.source === tailscaleSourceOfficial ? "" : config.source,
     config.resolvedVersion,
     `${runnerOS}-${config.arch}`,
   );
+}
+
+function normalizeVersion(version: string): string {
+  return version.startsWith("v") ? version.slice(1) : version;
+}
+
+function releaseTag(version: string): string {
+  return version.startsWith("v") ? version : `v${version}`;
+}
+
+async function fetchGithubRelease(url: string): Promise<githubRelease> {
+  const { stdout } = await execSilent(`curl ${url}`, "curl", [
+    "-H",
+    "Accept: application/vnd.github+json",
+    "-H",
+    "user-agent:action-setup-tailscale",
+    "-sL",
+    url,
+  ]);
+  return JSON.parse(stdout);
+}
+
+async function fetchGithubReleases(url: string): Promise<githubRelease[]> {
+  const { stdout } = await execSilent(`curl ${url}`, "curl", [
+    "-H",
+    "Accept: application/vnd.github+json",
+    "-H",
+    "user-agent:action-setup-tailscale",
+    "-sL",
+    url,
+  ]);
+  return JSON.parse(stdout);
+}
+
+function getForkReleaseAssetName(
+  binary: string,
+  runnerOS: string,
+  arch: string,
+): string {
+  const platform =
+    runnerOS === runnerWindows
+      ? "windows"
+      : runnerOS === runnerMacOS
+        ? "darwin"
+        : "linux";
+  const suffix = runnerOS === runnerWindows ? ".exe" : "";
+  return `${binary}-${platform}-${arch}${suffix}`;
+}
+
+async function downloadVerifiedAsset(
+  asset: githubReleaseAsset,
+  targetPath: string,
+): Promise<void> {
+  const downloadedPath = await tc.downloadTool(asset.browser_download_url, targetPath);
+  const actualSha = await calculateFileSha256(downloadedPath);
+  const expectedSha = asset.digest?.replace(/^sha256:/i, "").trim().toLowerCase();
+  if (!expectedSha) {
+    throw new Error(`Missing digest for ${asset.name}`);
+  }
+  core.info(`Expected sha256: ${expectedSha}`);
+  core.info(`Actual sha256: ${actualSha}`);
+  if (actualSha !== expectedSha) {
+    throw new Error(`SHA256 checksum mismatch for ${asset.name}`);
+  }
+}
+
+async function installTailscaleFromGithubReleases(
+  config: TailscaleConfig,
+  toolPath: string,
+  runnerOS: string,
+): Promise<void> {
+  if (config.sha256Sum) {
+    core.warning(
+      "sha256sum is ignored when installing the LiuTangLei release assets; GitHub release digests are verified instead.",
+    );
+  }
+
+  const release = await fetchGithubRelease(
+    `https://api.github.com/repos/LiuTangLei/tailscale/releases/tags/${releaseTag(config.resolvedVersion)}`,
+  );
+  const assetsByName = new Map(release.assets.map((asset) => [asset.name, asset]));
+
+  fs.mkdirSync(toolPath, { recursive: true });
+
+  const tailscaleAssetName = getForkReleaseAssetName(cmdTailscale, runnerOS, config.arch);
+  const tailscaledAssetName = getForkReleaseAssetName(cmdTailscaled, runnerOS, config.arch);
+  const tailscaleAsset = assetsByName.get(tailscaleAssetName);
+  const tailscaledAsset = assetsByName.get(tailscaledAssetName);
+
+  if (!tailscaleAsset || !tailscaledAsset) {
+    throw new Error(
+      `Missing release assets for ${releaseTag(config.resolvedVersion)} on ${runnerOS}/${config.arch}`,
+    );
+  }
+
+  await downloadVerifiedAsset(tailscaleAsset, path.join(toolPath, tailscaleAssetName));
+  await downloadVerifiedAsset(tailscaledAsset, path.join(toolPath, tailscaledAssetName));
+
+  if (runnerOS === runnerWindows) {
+    await execSilent("install fork service", path.join(toolPath, tailscaledAssetName), [
+      "install-system-daemon",
+    ]);
+    await execSilent("start fork service", "net", ["start", "Tailscale"]);
+    core.addPath(toolPath);
+    return;
+  }
+
+  fs.chmodSync(path.join(toolPath, tailscaleAssetName), 0o755);
+  fs.chmodSync(path.join(toolPath, tailscaledAssetName), 0o755);
+
+  await execSilent("copy tailscale binaries to /usr/local/bin", "sudo", [
+    "cp",
+    path.join(toolPath, tailscaleAssetName),
+    path.join(toolPath, tailscaledAssetName),
+    "/usr/local/bin",
+  ]);
+
+  await execSilent("chmod tailscale binary", "sudo", [
+    "chmod",
+    "+x",
+    cmdTailscaleFullPath,
+  ]);
+  await execSilent("chmod tailscaled binary", "sudo", [
+    "chmod",
+    "+x",
+    cmdTailscaledFullPath,
+  ]);
+}
+
+async function installTailscaleWindowsFromGithubReleases(
+  config: TailscaleConfig,
+  toolPath: string,
+  fromCache: boolean,
+): Promise<void> {
+  const tailscaleAssetName = getForkReleaseAssetName(cmdTailscale, runnerWindows, config.arch);
+  const tailscaledAssetName = getForkReleaseAssetName(cmdTailscaled, runnerWindows, config.arch);
+  fs.mkdirSync(toolPath, { recursive: true });
+
+  if (!fromCache) {
+    const release = await fetchGithubRelease(
+      `https://api.github.com/repos/LiuTangLei/tailscale/releases/tags/${releaseTag(config.resolvedVersion)}`,
+    );
+    const assetsByName = new Map(release.assets.map((asset) => [asset.name, asset]));
+    const tailscaleAsset = assetsByName.get(tailscaleAssetName);
+    const tailscaledAsset = assetsByName.get(tailscaledAssetName);
+
+    if (!tailscaleAsset || !tailscaledAsset) {
+      throw new Error(
+        `Missing release assets for ${releaseTag(config.resolvedVersion)} on ${runnerWindows}/${config.arch}`,
+      );
+    }
+
+    await downloadVerifiedAsset(tailscaleAsset, path.join(toolPath, tailscaleAssetName));
+    await downloadVerifiedAsset(tailscaledAsset, path.join(toolPath, tailscaledAssetName));
+  } else {
+    const tailscalePath = path.join(toolPath, tailscaleAssetName);
+    const tailscaledPath = path.join(toolPath, tailscaledAssetName);
+    if (!fs.existsSync(tailscalePath) || !fs.existsSync(tailscaledPath)) {
+      throw new Error(`Cached binaries not found in ${toolPath}`);
+    }
+  }
+
+  await execSilent("install fork service", path.join(toolPath, tailscaledAssetName), [
+    "install-system-daemon",
+  ]);
+  await execSilent("start fork service", "net", ["start", "Tailscale"]);
+  core.addPath(toolPath);
 }
 
 async function installCachedBinaries(
