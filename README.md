@@ -5,7 +5,7 @@ by adding a step to your workflow.
 
 ```yaml
 - name: Tailscale
-  uses: lazulikao/github-action@v4
+  uses: lazulikao/tailscale-awg-github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -35,7 +35,7 @@ on tailnets which use [Device Approval][kb-device-approval]
 
 ```yaml
 - name: Tailscale
-  uses: lazulikao/github-action@v4
+  uses: lazulikao/tailscale-awg-github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     audience: ${{ secrets.TS_AUDIENCE }}
@@ -79,7 +79,7 @@ You can do this by adding a list of hosts to ping to the action configuration:
 
 ```yaml
 - name: Tailscale
-  uses: lazulikao/github-action@v4
+  uses: lazulikao/tailscale-awg-github-action@v4
   with:
     ping: 100.x.y.z,my-machine.my-tailnet.ts.net
 ```
@@ -103,7 +103,7 @@ If you are using this Action in a [Tailnet Lock][kb-tailnet-lock] enabled networ
 
 ```yaml
 - name: Tailscale
-  uses: lazulikao/github-action@v4
+  uses: lazulikao/tailscale-awg-github-action@v4
   with:
     authkey: tskey-auth-...
     statedir: /tmp/tailscale-state/
@@ -115,7 +115,7 @@ Which Tailscale version to use can be set like this:
 
 ```yaml
 - name: Tailscale
-  uses: lazulikao/github-action@v4
+  uses: lazulikao/tailscale-awg-github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -127,7 +127,7 @@ If you'd like to specify the latest version, simply set the version as `latest`
 
 ```yaml
 - name: Tailscale
-  uses: lazulikao/github-action@v4
+  uses: lazulikao/tailscale-awg-github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -148,7 +148,7 @@ The action can also use the LiuTangLei AWG fork instead of upstream Tailscale:
 
 ```yaml
 - name: Tailscale
-  uses: lazulikao/github-action@v4
+  uses: lazulikao/tailscale-awg-github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -181,7 +181,7 @@ Although caching is generally recommended, you can disable it by passing `'false
 
 ```yaml
 - name: Tailscale
-  uses: lazulikao/github-action@v4
+  uses: lazulikao/tailscale-awg-github-action@v4
   with:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
